@@ -35,16 +35,17 @@ def load_data(csv_path):
     return data_dict
 
 # -----------------------------
-# Helper: Plot temperature (Max & Min together) using Altair with legend and year-only x-axis
+# Helper: Plot temperature (Max & Min together) using Altair with legend on top
 # -----------------------------
 def plot_temperature(df):
     """
     Returns an Altair chart with two lines:
       - Max_Temperature in dark red
       - Min_Temperature in light red
-    The y-axis is labeled as "Temperature" and the x-axis displays only years.
+    The y-axis is labeled as "Temperature" and the x-axis shows only years.
+    Legend is placed on top.
     """
-    # Melt the data to long format
+    # Melt the DataFrame into long format
     temp_df = df[['Date', 'Max_Temperature', 'Min_Temperature']].melt(
         id_vars='Date', 
         value_vars=['Max_Temperature', 'Min_Temperature'], 
@@ -58,21 +59,20 @@ def plot_temperature(df):
         color=alt.Color('Variable:N',
                         scale=alt.Scale(domain=['Max_Temperature', 'Min_Temperature'],
                                         range=['darkred', 'lightcoral']),
-                        legend=alt.Legend(title="Temperature Type")),
+                        legend=alt.Legend(orient='top', title="Temperature Type")),
         tooltip=['Date', 'Temperature', 'Variable']
     ).properties(width=700, height=300, title="Temperature over time")
     
     return chart
 
 # -----------------------------
-# Helper: Plot rainfall using Altair with legend and year-only x-axis
+# Helper: Plot rainfall using Altair with legend on top and year-only x-axis
 # -----------------------------
 def plot_rainfall(df):
     """
     Returns an Altair chart for Rainfall with a blue line.
-    A dummy field is added so that a legend is displayed.
+    A dummy column is added to force a legend, which is placed on top.
     """
-    # Create a dummy column with value "Rainfall" to force a legend entry.
     df = df.copy()
     df['Variable'] = "Rainfall"
     
@@ -82,7 +82,7 @@ def plot_rainfall(df):
         tooltip=['Date', 'Rainfall'],
         color=alt.Color('Variable:N',
                         scale=alt.Scale(domain=["Rainfall"], range=["blue"]),
-                        legend=alt.Legend(title="Variable"))
+                        legend=alt.Legend(orient='top', title="Variable"))
     ).properties(width=700, height=300, title="Rainfall over time")
     
     return chart
@@ -121,7 +121,7 @@ if section == "Meteorological Variable":
                 if variable_selected != "select":
                     df_subset = data_dict[state_selected][district_block_selected].copy()
                     
-                    # Filter data based on the time selection if not "Whole"
+                    # Filter data based on time selection if not "Whole"
                     if time_selected != "Whole":
                         year_filter = int(time_selected.replace("Since", "").strip())
                         df_subset = df_subset[df_subset['Date'].dt.year >= year_filter]
@@ -129,7 +129,6 @@ if section == "Meteorological Variable":
                     if df_subset.empty:
                         st.error("No data available for the selected time range.")
                     else:
-                        # If "All" is selected, plot both Temperature and Rainfall charts
                         if variable_selected == "All":
                             temp_chart = plot_temperature(df_subset)
                             rain_chart = plot_rainfall(df_subset)

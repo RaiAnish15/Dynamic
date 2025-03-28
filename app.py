@@ -35,17 +35,16 @@ def load_data(csv_path):
     return data_dict
 
 # -----------------------------
-# Helper: Plot temperature (Max & Min together) using Altair with legend on top
+# Helper: Plot temperature (Max & Min together) using Altair with legend and common x-domain
 # -----------------------------
-def plot_temperature(df):
+def plot_temperature(df, x_domain):
     """
     Returns an Altair chart with two lines:
       - Max_Temperature in dark red
       - Min_Temperature in light red
-    The y-axis is labeled as "Temperature" and the x-axis shows only years.
-    Legend is placed on top.
+    The x-axis displays only years (using the provided x_domain) and the y-axis is labeled "Temperature".
     """
-    # Melt the DataFrame into long format
+    # Melt the DataFrame to long format
     temp_df = df[['Date', 'Max_Temperature', 'Min_Temperature']].melt(
         id_vars='Date', 
         value_vars=['Max_Temperature', 'Min_Temperature'], 
@@ -54,7 +53,9 @@ def plot_temperature(df):
     )
     
     chart = alt.Chart(temp_df).mark_line().encode(
-        x=alt.X('Date:T', title='Date', axis=alt.Axis(format='%Y')),
+        x=alt.X('Date:T', title='Date',
+                scale=alt.Scale(domain=x_domain),
+                axis=alt.Axis(format='%Y', tickCount=5)),
         y=alt.Y('Temperature:Q', title='Temperature'),
         color=alt.Color('Variable:N',
                         scale=alt.Scale(domain=['Max_Temperature', 'Min_Temperature'],
@@ -66,18 +67,20 @@ def plot_temperature(df):
     return chart
 
 # -----------------------------
-# Helper: Plot rainfall using Altair with legend on top and year-only x-axis
+# Helper: Plot rainfall using Altair with legend and common x-domain
 # -----------------------------
-def plot_rainfall(df):
+def plot_rainfall(df, x_domain):
     """
     Returns an Altair chart for Rainfall with a blue line.
-    A dummy column is added to force a legend, which is placed on top.
+    A dummy column is added to force a legend, and the x-axis shows only years.
     """
     df = df.copy()
     df['Variable'] = "Rainfall"
     
     chart = alt.Chart(df).mark_line().encode(
-        x=alt.X('Date:T', title='Date', axis=alt.Axis(format='%Y')),
+        x=alt.X('Date:T', title='Date',
+                scale=alt.Scale(domain=x_domain),
+                axis=alt.Axis(format='%Y', tickCount=5)),
         y=alt.Y('Rainfall:Q', title='Rainfall'),
         tooltip=['Date', 'Rainfall'],
         color=alt.Color('Variable:N',
@@ -110,7 +113,7 @@ if section == "Meteorological Variable":
             district_block_selected = st.sidebar.selectbox("Select District-Block", ["select"] + district_block_options)
             
             if district_block_selected != "select":
-                # 3) Variable dropdown: Temperature, Rainfall, or All
+                # 3) Variable dropdown: only Temperature, Rainfall, or All
                 variable_options = ["select", "Temperature", "Rainfall", "All"]
                 variable_selected = st.sidebar.selectbox("Select Variable", variable_options)
                 
@@ -121,7 +124,7 @@ if section == "Meteorological Variable":
                 if variable_selected != "select":
                     df_subset = data_dict[state_selected][district_block_selected].copy()
                     
-                    # Filter data based on time selection if not "Whole"
+                    # Filter data based on the time selection if not "Whole"
                     if time_selected != "Whole":
                         year_filter = int(time_selected.replace("Since", "").strip())
                         df_subset = df_subset[df_subset['Date'].dt.year >= year_filter]
@@ -129,16 +132,23 @@ if section == "Meteorological Variable":
                     if df_subset.empty:
                         st.error("No data available for the selected time range.")
                     else:
+                        # Compute common x-axis domain. If min==max, extend by one year.
+                        x_min = df_subset['Date'].min()
+                        x_max = df_subset['Date'].max()
+                        if x_min == x_max:
+                            x_max = x_min + pd.DateOffset(years=1)
+                        x_domain = [x_min, x_max]
+                        
                         if variable_selected == "All":
-                            temp_chart = plot_temperature(df_subset)
-                            rain_chart = plot_rainfall(df_subset)
+                            temp_chart = plot_temperature(df_subset, x_domain)
+                            rain_chart = plot_rainfall(df_subset, x_domain)
                             st.altair_chart(temp_chart, use_container_width=True)
                             st.altair_chart(rain_chart, use_container_width=True)
                         elif variable_selected == "Temperature":
-                            chart = plot_temperature(df_subset)
+                            chart = plot_temperature(df_subset, x_domain)
                             st.altair_chart(chart, use_container_width=True)
                         elif variable_selected == "Rainfall":
-                            chart = plot_rainfall(df_subset)
+                            chart = plot_rainfall(df_subset, x_domain)
                             st.altair_chart(chart, use_container_width=True)
 
 elif section == "Market":

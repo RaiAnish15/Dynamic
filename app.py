@@ -42,12 +42,14 @@ def plot_temperature(df):
     Returns an Altair chart with two lines:
       - Max_Temperature in dark red
       - Min_Temperature in light red
-    The x-axis shows only years and the y-axis is labeled "Temperature".
+    The y-axis is labeled as "Temperature" and the x-axis displays only years.
     """
-    # Melt the data to a long format
+    # Melt the data to long format
     temp_df = df[['Date', 'Max_Temperature', 'Min_Temperature']].melt(
-        id_vars='Date', value_vars=['Max_Temperature', 'Min_Temperature'],
-        var_name='Variable', value_name='Temperature'
+        id_vars='Date', 
+        value_vars=['Max_Temperature', 'Min_Temperature'], 
+        var_name='Variable', 
+        value_name='Temperature'
     )
     
     chart = alt.Chart(temp_df).mark_line().encode(
@@ -63,23 +65,26 @@ def plot_temperature(df):
     return chart
 
 # -----------------------------
-# Helper: Plot rainfall using Altair with year-only x-axis
+# Helper: Plot rainfall using Altair with legend and year-only x-axis
 # -----------------------------
 def plot_rainfall(df):
     """
-    Returns an Altair chart for Rainfall with a blue line and x-axis showing only years.
+    Returns an Altair chart for Rainfall with a blue line.
+    A dummy field is added so that a legend is displayed.
     """
-    chart = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=alt.X('Date:T', title='Date', axis=alt.Axis(format='%Y')),
-            y=alt.Y('Rainfall:Q', title='Rainfall'),
-            tooltip=['Date', 'Rainfall']
-        )
-        .properties(title="Rainfall over time", width=700, height=300)
-        .encode(color=alt.value("blue"))
-    )
+    # Create a dummy column with value "Rainfall" to force a legend entry.
+    df = df.copy()
+    df['Variable'] = "Rainfall"
+    
+    chart = alt.Chart(df).mark_line().encode(
+        x=alt.X('Date:T', title='Date', axis=alt.Axis(format='%Y')),
+        y=alt.Y('Rainfall:Q', title='Rainfall'),
+        tooltip=['Date', 'Rainfall'],
+        color=alt.Color('Variable:N',
+                        scale=alt.Scale(domain=["Rainfall"], range=["blue"]),
+                        legend=alt.Legend(title="Variable"))
+    ).properties(width=700, height=300, title="Rainfall over time")
+    
     return chart
 
 # -----------------------------
@@ -124,6 +129,7 @@ if section == "Meteorological Variable":
                     if df_subset.empty:
                         st.error("No data available for the selected time range.")
                     else:
+                        # If "All" is selected, plot both Temperature and Rainfall charts
                         if variable_selected == "All":
                             temp_chart = plot_temperature(df_subset)
                             rain_chart = plot_rainfall(df_subset)

@@ -35,34 +35,37 @@ def load_data(csv_path):
     return data_dict
 
 # -----------------------------
-# Helper: Plot temperature (Max & Min together) using Altair
+# Helper: Plot temperature (Max & Min together) using Altair with legend
 # -----------------------------
 def plot_temperature(df):
     """
-    Returns an Altair chart with two lines:
-      - Max_Temperature in dark red
-      - Min_Temperature in light red
-    The y-axis is labeled as "Temperature".
+    Converts the temperature data by folding the DataFrame so that
+    both Max_Temperature and Min_Temperature are plotted in a single chart.
+    Max_Temperature is shown in dark red and Min_Temperature in light coral.
+    A legend is added to differentiate them.
     """
-    base = alt.Chart(df).encode(x=alt.X('Date:T', title='Date'))
-    
-    max_line = base.mark_line().encode(
-        y=alt.Y('Max_Temperature:Q', title='Temperature'),
-        tooltip=['Date', 'Max_Temperature']
-    ).encode(color=alt.value("darkred"))
-    
-    min_line = base.mark_line().encode(
-        y=alt.Y('Min_Temperature:Q', title='Temperature'),
-        tooltip=['Date', 'Min_Temperature']
-    ).encode(color=alt.value("lightcoral"))
-    
-    chart = alt.layer(max_line, min_line).resolve_scale(y='shared').properties(
-        width=700, height=300, title="Temperature over time"
+    # Melt the DataFrame to get a long format
+    temp_df = df[['Date', 'Max_Temperature', 'Min_Temperature']].melt(
+        id_vars='Date', 
+        value_vars=['Max_Temperature', 'Min_Temperature'], 
+        var_name='Variable', 
+        value_name='Temperature'
     )
+    
+    chart = alt.Chart(temp_df).mark_line().encode(
+        x=alt.X('Date:T', title='Date'),
+        y=alt.Y('Temperature:Q', title='Temperature'),
+        color=alt.Color('Variable:N',
+                        scale=alt.Scale(domain=['Max_Temperature', 'Min_Temperature'],
+                                        range=['darkred', 'lightcoral']),
+                        legend=alt.Legend(title="Temperature Type")),
+        tooltip=['Date', 'Temperature', 'Variable']
+    ).properties(width=700, height=300, title="Temperature over time")
+    
     return chart
 
 # -----------------------------
-# Helper: Plot rainfall using Altair
+# Helper: Plot rainfall using Altair with legend (optional)
 # -----------------------------
 def plot_rainfall(df):
     """
@@ -74,10 +77,10 @@ def plot_rainfall(df):
         .encode(
             x=alt.X('Date:T', title='Date'),
             y=alt.Y('Rainfall:Q', title='Rainfall'),
-            tooltip=['Date', 'Rainfall']
+            tooltip=['Date', 'Rainfall'],
+            color=alt.value("blue")  # Single color; legend not necessary
         )
         .properties(title="Rainfall over time", width=700, height=300)
-        .encode(color=alt.value("blue"))
     )
     return chart
 
@@ -104,7 +107,7 @@ if section == "Meteorological Variable":
             district_block_selected = st.sidebar.selectbox("Select District-Block", ["select"] + district_block_options)
             
             if district_block_selected != "select":
-                # 3) Variable dropdown: Temperature, Rainfall, or All
+                # 3) Variable dropdown: only Temperature, Rainfall, or All
                 variable_options = ["select", "Temperature", "Rainfall", "All"]
                 variable_selected = st.sidebar.selectbox("Select Variable", variable_options)
                 
@@ -115,33 +118,26 @@ if section == "Meteorological Variable":
                 if variable_selected != "select":
                     df_subset = data_dict[state_selected][district_block_selected].copy()
                     
-                    # Filter data based on the time selection if not "Whole"
+                    # Filter data based on time selection if not "Whole"
                     if time_selected != "Whole":
-                        # Extract year from selection (e.g., "Since 1990" -> 1990)
                         year_filter = int(time_selected.replace("Since", "").strip())
                         df_subset = df_subset[df_subset['Date'].dt.year >= year_filter]
                     
-                    # If "All" is selected, plot Temperature and Rainfall charts
-                    if variable_selected == "All":
-                        if not df_subset.empty:
+                    if df_subset.empty:
+                        st.error("No data available for the selected time range.")
+                    else:
+                        # If "All" is selected, show both Temperature and Rainfall charts
+                        if variable_selected == "All":
                             temp_chart = plot_temperature(df_subset)
                             rain_chart = plot_rainfall(df_subset)
                             st.altair_chart(temp_chart, use_container_width=True)
                             st.altair_chart(rain_chart, use_container_width=True)
-                        else:
-                            st.error("No data available for the selected time range.")
-                    elif variable_selected == "Temperature":
-                        if not df_subset.empty:
+                        elif variable_selected == "Temperature":
                             chart = plot_temperature(df_subset)
                             st.altair_chart(chart, use_container_width=True)
-                        else:
-                            st.error("No temperature data available for the selected time range.")
-                    elif variable_selected == "Rainfall":
-                        if not df_subset.empty:
+                        elif variable_selected == "Rainfall":
                             chart = plot_rainfall(df_subset)
                             st.altair_chart(chart, use_container_width=True)
-                        else:
-                            st.error("No rainfall data available for the selected time range.")
 
 elif section == "Market":
     st.sidebar.header("Market Options")

@@ -10,50 +10,29 @@ st.title("Smart Agri: Basmati Intelligence Portal")
 section = st.radio("Select Section", options=["Meteorological Variable", "Market", "What If"], horizontal=True)
 
 # -----------------------------
-# Helper: Build file dictionary from CSV files in the Met folder
+# Helper: Load and group CSV data
 # -----------------------------
-def build_file_dict_from_met_folder(folder):
+@st.cache_data
+def load_data(csv_path):
     """
-    Reads CSV files from the specified folder and builds a nested dictionary:
-      {
-         state: {
-             "District-Block": {
-                 "Rainfall": file_path,
-                 "Temperature": file_path
-             }
-         }
-      }
-    Expected filenames:
-      State_District_Block_Rainfall.csv  
-      State_District_Block_Temperature.csv
-    """
-    file_dict = {}
-    if not os.path.exists(folder):
-        st.error(f"Folder '{folder}' not found.")
-        return None
-
-    csv_files = [f for f in os.listdir(folder) if f.endswith(".csv")]
-    if not csv_files:
-        st.error(f"No CSV files found in the folder '{folder}'.")
-        return None
-
-    for filename in csv_files:
-        # Remove extension and split by underscore
-        name_no_ext = filename.split(".")[0]
-        parts = name_no_ext.split("_")
-        if len(parts) < 4:
-            st.warning(f"Filename '{filename}' does not have enough parts. Skipping.")
-            continue
-        
-        state = parts[0]
-        district = parts[1]
-        block = parts[2]
-        variable = parts[3]  # Should be either 'Rainfall' or 'Temperature'
-        
-        district_block = f"{district}-{block}"
-        file_dict.setdefault(state, {}).setdefault(district_block, {})[variable] = os.path.join(folder, filename)
+    Reads the CSV (State, District, Block, Date, Rainfall, Max_Temperature, Min_Temperature),
+    parses 'Date' as datetime (dayfirst), sorts by Date, and groups by (State, District, Block).
     
-    return file_dict
+    Returns a nested dictionary:
+      data_dict[state][f"{district}-{block}"] = DataFrame for that group
+    """
+    if not os.path.exists(csv_path):
+        st.error(f"CSV file not found at: {csv_path}")
+        return {}
+
+    df = pd.read_csv(csv_path, parse_dates=['Date'], dayfirst=True)
+    df.sort_values('Date', inplace=True)
+    
+    data_dict = {}
+    for (state, district, block), group_df in df.groupby(['State', 'District', 'Block']):
+        district_block = f"{district}-{block}"
+        data_dict.setdefault(state, {})[district_block] = group_df
+    return data_dict
 
 # -----------------------------
 # Helper: Plot temperature (Max & Min together) using Altair
@@ -103,65 +82,66 @@ def plot_rainfall(df):
     return chart
 
 # -----------------------------
-# Meteorological Variable Section using CSV files from the Met folder
+# Meteorological Variable Section using CSV data
 # -----------------------------
 if section == "Meteorological Variable":
     st.sidebar.header("Meteorological Variable Options")
     
-    # Set folder name; ensure it exists and contains the CSV files
-    folder = "Met"  # Assuming the CSV files are in the 'Met' folder
-    file_dict = build_file_dict_from_met_folder(folder)
+    # Load data from Met/weather_data.csv
+    csv_path = os.path.join("Met", "weather_data.csv")
+    data_dict = load_data(csv_path)
     
-    if file_dict:
+    if not data_dict:
+        st.info("No data available. Please check your CSV file path or contents.")
+    else:
         # 1) State dropdown
-        state_options = sorted(file_dict.keys())
+        state_options = sorted(data_dict.keys())
         state_selected = st.sidebar.selectbox("Select State", ["select"] + state_options)
         
         if state_selected != "select":
             # 2) District-Block dropdown
-            district_block_options = sorted(file_dict[state_selected].keys())
+            district_block_options = sorted(data_dict[state_selected].keys())
             district_block_selected = st.sidebar.selectbox("Select District-Block", ["select"] + district_block_options)
             
             if district_block_selected != "select":
-                # 3) Variable dropdown: only Temperature, Rainfall, or All
+                # 3) Variable dropdown: Temperature, Rainfall, or All
                 variable_options = ["select", "Temperature", "Rainfall", "All"]
                 variable_selected = st.sidebar.selectbox("Select Variable", variable_options)
                 
+                # 4) Time filter dropdown: Whole, Since 1990, Since 2000, Since 2010
+                time_options = ["Whole", "Since 1990", "Since 2000", "Since 2010"]
+                time_selected = st.sidebar.selectbox("Select Time Range", time_options)
+                
                 if variable_selected != "select":
-                    # Load the CSV files for the selected state and district-block
-                    df_temp = None
-                    df_rain = None
+                    df_subset = data_dict[state_selected][district_block_selected].copy()
                     
-                    if "Temperature" in file_dict[state_selected][district_block_selected]:
-                        df_temp = pd.read_csv(file_dict[state_selected][district_block_selected]["Temperature"], parse_dates=['Date'], dayfirst=True)
-                        df_temp.sort_values('Date', inplace=True)
-                    if "Rainfall" in file_dict[state_selected][district_block_selected]:
-                        df_rain = pd.read_csv(file_dict[state_selected][district_block_selected]["Rainfall"], parse_dates=['Date'], dayfirst=True)
-                        df_rain.sort_values('Date', inplace=True)
+                    # Filter data based on the time selection if not "Whole"
+                    if time_selected != "Whole":
+                        # Extract year from selection (e.g., "Since 1990" -> 1990)
+                        year_filter = int(time_selected.replace("Since", "").strip())
+                        df_subset = df_subset[df_subset['Date'].dt.year >= year_filter]
                     
-                    if variable_selected == "Temperature":
-                        if df_temp is not None:
-                            chart = plot_temperature(df_temp)
+                    # If "All" is selected, plot Temperature and Rainfall charts
+                    if variable_selected == "All":
+                        if not df_subset.empty:
+                            temp_chart = plot_temperature(df_subset)
+                            rain_chart = plot_rainfall(df_subset)
+                            st.altair_chart(temp_chart, use_container_width=True)
+                            st.altair_chart(rain_chart, use_container_width=True)
+                        else:
+                            st.error("No data available for the selected time range.")
+                    elif variable_selected == "Temperature":
+                        if not df_subset.empty:
+                            chart = plot_temperature(df_subset)
                             st.altair_chart(chart, use_container_width=True)
                         else:
-                            st.error("Temperature data not available for the selected group.")
+                            st.error("No temperature data available for the selected time range.")
                     elif variable_selected == "Rainfall":
-                        if df_rain is not None:
-                            chart = plot_rainfall(df_rain)
+                        if not df_subset.empty:
+                            chart = plot_rainfall(df_subset)
                             st.altair_chart(chart, use_container_width=True)
                         else:
-                            st.error("Rainfall data not available for the selected group.")
-                    elif variable_selected == "All":
-                        if df_temp is not None:
-                            chart = plot_temperature(df_temp)
-                            st.altair_chart(chart, use_container_width=True)
-                        else:
-                            st.error("Temperature data not available for the selected group.")
-                        if df_rain is not None:
-                            chart = plot_rainfall(df_rain)
-                            st.altair_chart(chart, use_container_width=True)
-                        else:
-                            st.error("Rainfall data not available for the selected group.")
+                            st.error("No rainfall data available for the selected time range.")
 
 elif section == "Market":
     st.sidebar.header("Market Options")

@@ -4,7 +4,7 @@ import plotly.express as px
 from PIL import Image
 import os
 
-st.set_page_config(page_title="Smart Agri: Basmati Intelligence Portal", layout="wide")
+st.set_page_config(page_title="Smargri: Basmati Intelligence Portal", layout="wide")
 st.title("Smart Agri: Basmati Intelligence Portal")
 
 # Top-level section selection including "Quality"
